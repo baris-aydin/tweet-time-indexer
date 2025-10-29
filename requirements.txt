@@ -1,0 +1,17 @@
+# Core
+paddleocr==2.7.0.3
+opencv-python<=4.6.0.66
+pillow==10.4.0
+dateparser==1.2.0
+tzdata==2025.1
+
+# UI
+streamlit==1.38.0
+
+# Dev / Quality
+pytest==8.3.3
+black==24.10.0
+ruff==0.6.8
+pre-commit==3.8.0
+
+
