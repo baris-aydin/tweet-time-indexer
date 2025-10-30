@@ -1,158 +1,151 @@
-Tweet-Time-Indexer (v1.0)
+# Tweet-Time-Indexer (v1.0)
 
-Find tweet screenshots that match a specific time.
-This Streamlit app OCRs the timestamp line from Twitter/X screenshots, converts it to UTC, and lets you search for matches at an exact minute or within a tolerance window.
+Find the **original posting time** of X/Twitter screenshots by OCR’ing the timestamp line and converting it to UTC.
+Built with **Streamlit + PaddleOCR + OpenCV**.
 
-✨ What it does
+---
 
-Indexes a folder of .png/.jpg/.jpeg/.webp screenshots.
+## ✨ What it does
 
-Uses PaddleOCR + OpenCV to read the timestamp row (e.g., 4:05 PM · Aug 17, 2022 or 11:30 PM · 21/03/2030).
+* **Indexes a folder** of screenshots and extracts the tweet timestamp via OCR
+* Supports both **dark/light themes** and multiple timestamp styles
+  (e.g., `4:05 PM · Aug 17, 2022`, `09:04 PM · 26/11/2022`)
+* Converts the parsed time to **UTC**, then finds screenshots that match an input time with **Exact / ±1/2/5/10 min** windows
+* **Caches** OCR results per folder for fast re-runs
 
-Parses the text with dateparser, attaches the chosen timezone (default America/Toronto), and stores it as UTC.
+---
 
-Lets you query a target date/time and a match window (Exact, ±1/2/5/10 min) to see all matching screenshots.
+## 📦 Requirements
 
-Everything runs locally; no screenshots are uploaded.
+* **Python 3.11** (recommended for easiest dependency compatibility)
+* Windows, macOS, or Linux
+* Internet access on first run (OCR models auto-download)
 
-🖼️ Supported timestamp styles (examples)
+---
 
-4:05 PM · Aug 17, 2022
+## 🔧 Install & Run
 
-9:04 PM · Nov 26, 2022
+```powershell
+# 1) Clone
+git clone https://github.com/<you>/tweet-time-indexer.git
+cd tweet-time-indexer
 
-11:30 PM · 21/03/2030
-
-Variants with minor punctuation/spacing differences are handled.
-
-Tip: For consistent testing, set X/Twitter Display language: English (US) and your OS/browser timezone to Eastern (Toronto).
-
-🗂️ Project layout
-app/
-  ui_streamlit.py      # Streamlit UI + OCR/index/search logic
-data/
-  screenshots/         # Default folder the app points to (you can change it in the UI)
-
-🚀 Quick start
-
-Recommended: Python 3.11 on Windows (works on macOS/Linux too).
-
-# 1) Create & activate a venv
+# 2) Create & activate a Python 3.11 venv
 py -3.11 -m venv .venv
-.\.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1  # (Windows PowerShell)
+# source .venv/bin/activate   # (macOS/Linux)
 
-# 2) Install deps (CPU-only)
+# 3) Install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
-pip install paddlepaddle==2.6.1  # CPU build of PaddlePaddle
 
-# 3) Run the app
+# (Windows note) If PaddleOCR asks for extra deps, install:
+pip install paddlepaddle==2.6.1 opencv-contrib-python==4.6.0.66
+
+# 4) Run the app
 streamlit run app/ui_streamlit.py
+```
 
+First launch will download PaddleOCR model files to your user cache (e.g., `~/.paddleocr/...`).
 
-The first OCR run will download model files to ~/.paddleocr.
+---
 
-🧭 How to use
+## 🧪 Create Test Screenshots
 
-Put a few tweet screenshots in a folder (default: data/screenshots/).
+For reliable tests, set X/Twitter to **English (US)** and your system/browser timezone to **America/Toronto (Eastern)**.
+
+* Twitter (web): **More → Settings and privacy → Accessibility, display, and languages → Languages → Display language: English (US)**
+* Windows: **Settings → Time & language → Date & time → Time zone: (UTC-05:00) Eastern Time**
+* Chrome/Edge: set UI language to English (United States) and hard-refresh
+
+Now open a tweet’s **permalink** so you see a line like:
+
+* `4:05 PM · Aug 17, 2022` (common)
+* `9:04 PM · 26/11/2022` (numeric day-first, some clients)
+
+Take screenshots and place them in:
+
+```
+data/
+  screenshots/
+    your-file-1.png
+    your-file-2.jpg
+```
 
 In the app:
 
-Set Screenshots folder (or accept default).
+1. Enter the folder path (defaults to `data/screenshots`)
+2. Click **Index folder (OCR timestamps)**
+3. Choose a date/time + window and click **Find matches**
 
-Click Index folder (OCR timestamps).
-You’ll see how many images produced a parseable timestamp.
+---
 
-Choose the date/time you’re looking for and a match window.
+## 🗂 Project Structure
 
-Click Find matches to list any screenshots within the window (UTC is shown for each match).
+```
+app/
+  ui_streamlit.py   # Streamlit UI + OCR/indexing logic
+data/
+  screenshots/      # Put your test images here
+```
 
-⚙️ Configuration
+---
 
-Default timezone: America/Toronto (edit DEFAULT_TZ in ui_streamlit.py).
+## 🧠 How it works (quick)
 
-OCR crop strategy: tries several candidate bands near the bottom of the image (adjust CANDIDATE_BANDS if your screenshots differ).
+1. **Crop candidates** at the lower part of the image (where timestamps live on X/Twitter)
+2. **Preprocess** (grayscale, median blur, adaptive threshold + inverse)
+3. **OCR** with PaddleOCR on each variant, merge lines to a text blob
+4. **Parse** with `dateparser` (timezone-aware, converted to UTC)
+5. **Cache** results per folder (`@st.cache_data`)
+6. **Match** by exact minute or ±N minutes
 
-Caching:
+---
 
-@st.cache_resource for the OCR engine.
+## ⚠️ Troubleshooting
 
-@st.cache_data for the per-folder index.
+* **“`set_page_config()` can only be called once…”**
+  Ensure it’s called at the very top of the script (this repo already does).
 
-🧪 Generating reliable test screenshots
+* **`ImageMixin.image() got an unexpected keyword argument 'use_container_width'`**
+  If you hit this on older Streamlit, remove that keyword or upgrade Streamlit.
+  (This repo falls back to `st.image(img)` if needed.)
 
-Force X/Twitter to English (US) and set OS/browser timezone to Eastern.
+* **NumPy / OpenCV ABI errors**
+  Use Python 3.11 and keep `numpy==1.26.x` with `opencv-contrib-python==4.6.0.66` when using PaddleOCR 2.7.0.3.
 
-Capture the tweet detail page (click the timestamp) so the timestamp line appears clearly.
+* **`ModuleNotFoundError: No module named 'paddle'`**
+  Install PaddlePaddle (CPU): `pip install paddlepaddle==2.6.1`.
 
-Test both light and dark themes.
+* **`PyMuPDF` build errors**
+  Not required by the app unless you enable PDF input; it’s safe to omit.
 
-Include edge cases:
+---
 
-12:00 AM / 11:59 PM
+## 🔒 Privacy
 
-DST transition days (March/November)
+All OCR runs **locally** on your machine. The app only reads images from the folder you choose.
 
-Different years and numeric vs month-name formats.
+---
 
-🛠️ Troubleshooting
+## 🗺 Roadmap
 
-ImportError: numpy.core.multiarray failed to import
-Ensure NumPy is compatible with OpenCV 4.6 wheels. A safe combo used in dev:
+* Drag-and-drop single image mode
+* Batch export of matched results (CSV/JSON)
+* More robust region detection & language packs
+* Optional local model caching controls
 
-opencv-contrib-python==4.6.0.66
+---
 
-numpy==1.26.x
+## 🤝 Acknowledgements
 
-Python 3.11
+* [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
+* [Streamlit](https://streamlit.io)
+* [OpenCV](https://opencv.org)
+* [dateparser](https://dateparser.readthedocs.io/)
 
-PaddleOCR missing extras
-If you installed paddleocr with --no-deps, also install:
+---
 
-pip install opencv-contrib-python==4.6.0.66 scikit-image attrdict beautifulsoup4 lxml fire
+## 📜 License
 
-
-(The app doesn’t need PyMuPDF/pdf2docx/premailer/openpyxl.)
-
-ModuleNotFoundError: No module named 'paddle'
-Install CPU PaddlePaddle: pip install paddlepaddle==2.6.1
-
-Streamlit:
-If you see set_page_config() can only be called once, make sure it’s only called at the top of the script.
-
-🧹 Dev tooling
-
-Optional but recommended:
-
-pip install pre-commit black ruff
-pre-commit install
-# Format / lint:
-black .
-ruff check .
-
-🗺️ Roadmap ideas
-
-Add a file picker widget and drag-drop.
-
-Show confidence and bounding boxes for the OCR’d timestamp.
-
-Support additional locales explicitly (e.g., Turkish, German) with format hints.
-
-Export index to a CSV for offline search.
-
-Batch-rename or move matched screenshots.
-
-📄 License
-
-TBD 
-
-🙏 Acknowledgements
-
-PaddleOCR
-
-PaddlePaddle
-
-OpenCV
-
-Streamlit
-
-dateparser
+MIT (see `LICENSE` if added).
