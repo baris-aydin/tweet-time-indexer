@@ -5,6 +5,9 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import shutil
+import csv
+
 import cv2
 import numpy as np
 import streamlit as st
@@ -225,6 +228,42 @@ def within_window(target_utc: datetime, candidate_utc: datetime, minutes: int) -
     delta = abs(candidate_utc - target_utc)
     return delta <= timedelta(minutes=minutes)
 
+def ensure_unique_name(dest_dir: Path, filename: str) -> Path:
+    """Return a non-colliding path like name.png, name (1).png, name (2).png..."""
+    base = Path(filename).stem
+    ext = Path(filename).suffix
+    candidate = dest_dir / f"{base}{ext}"
+    i = 1
+    while candidate.exists():
+        candidate = dest_dir / f"{base} ({i}){ext}"
+        i += 1
+    return candidate
+
+def save_matches_to_folder(matches: list[dict], dest_dir: Path, clear_first: bool) -> tuple[int, list[Path]]:
+    """
+    Copy matched images into dest_dir. Returns (saved_count, saved_paths).
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    if clear_first:
+        for p in dest_dir.glob("*"):
+            try:
+                if p.is_file():
+                    p.unlink()
+            except Exception:
+                pass  # best effort
+
+    saved_paths: list[Path] = []
+    for rec in matches:
+        src: Path = rec["path"]
+        target = ensure_unique_name(dest_dir, src.name)
+        shutil.copy2(src, target)
+        saved_paths.append(target)
+
+    return len(saved_paths), saved_paths
+
+
+
 # -----------------------------
 # Streamlit UI
 # -----------------------------
@@ -236,6 +275,13 @@ st.caption("Pick a screenshots folder, choose a date/time, and find matching Twi
 default_screens_dir = str(Path.cwd() / "data" / "screenshots")
 folder_str = st.text_input("Screenshots folder", value=default_screens_dir)
 folder = Path(folder_str)
+
+matched_default = str((folder / "matched").resolve())
+matched_folder_str = st.text_input("Matched folder (where to copy found screenshots)", value=matched_default)
+matched_folder = Path(matched_folder_str)
+
+opt_clear = st.checkbox("Clear matched folder before saving", value=False, help="Deletes existing files inside the matched folder before saving new matches.")
+
 
 colA, colB, colC = st.columns(3)
 with colA:
@@ -310,12 +356,20 @@ if st.button("Find matches"):
                 st.info("No matches found.")
             else:
                 st.success(f"Found {len(matches)} match(es):")
+
+                # Save to matched folder (copy only)
+                try:
+                    saved_count, saved_paths = save_matches_to_folder(matches, matched_folder, clear_first=opt_clear)
+                    st.write(f"✅ Saved **{saved_count}** file(s) to: `{matched_folder}`")
+                except Exception as e:
+                    st.error(f"Failed to save matches: {e}")
+
+                # Show previews
                 for rec in matches:
                     p: Path = rec["path"]
-                    st.write(f"**{p.name}**  —  OCR: `{rec['raw']}`  —  UTC: `{rec['dt_utc'].isoformat(timespec='minutes')}`")
-                    # Show preview
+                    st.write(f"**{p.name}** — OCR: `{rec['raw']}` — UTC: `{rec['dt_utc'].isoformat(timespec='minutes')}`")
                     img = load_image_cv(p)
                     if img is not None:
-                        # convert BGR->RGB for display
                         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                        st.image(rgb, use_column_width=True)
+                        st.image(rgb)  # keep arg-less for Streamlit compatibility
+
